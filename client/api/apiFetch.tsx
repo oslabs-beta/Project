@@ -2,10 +2,15 @@ interface Querystr {
   query: string;
 }
 
-interface QueryResponse {
-  res: any;
+export interface QueryResponse {
+  res: string;
   time: number;
   cacheHit: boolean;
+  hitPercentage: number;
+  missPercentage: number;
+  totalQueries: number;
+  totalHits: number;
+  error: boolean;
 }
 
 export default async function getData(
@@ -19,6 +24,7 @@ export default async function getData(
       headers: { "Content-Type": "application/json" },
     }
   );
+  console.log('request', request)
 
   const result: QueryResponse = await fetch(request)
     .then((res) => {

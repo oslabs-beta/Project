@@ -9,6 +9,7 @@ import PieChart from "./Demo_Components/PieChart";
 import LineChart from "./Demo_Components/LineChart";
 import ResultCard from "./Demo_Components/ResultCard";
 import clearCache from "../api/clearCache";
+import { QueryResponse } from "../api/apiFetch";
 
 // for which api part is selected by user (people, planets etc)
 type Fields = {
@@ -41,11 +42,19 @@ const defaultPlanet: Fields = {
   climate: "",
 };
 
-interface dataFormProps {
+interface DataFormProps {
   changePage: (page: string) => void;
 }
 
-export default function Demo({ changePage }: dataFormProps) {
+type DataTypes = {
+  id: number;
+  cacheHit: boolean;
+  response_time: number;
+  hitPercentage: number;
+  missPercentage: number;
+};
+
+export default function Demo({ changePage }: DataFormProps) {
   // updates queryString and currentField (the default fields for what to display)
   const [queryString, setQueryString] = useState<string>("");
   const [currentFields, setField] = useState<Fields>(defaultFields);
@@ -66,27 +75,27 @@ export default function Demo({ changePage }: dataFormProps) {
   //  if idBox is checked, this updates current id selected
   const [selectedId, setSelectedId] = useState<string>("1");
   // data recieved from backend, queryData is data used when displaying results, and displayResults is a boolean to determine if they should be displayed or not based on if user is changing fields
-  const [queryData, setQueryData] = useState<any>({});
+  const [queryData, setQueryData] = useState<QueryResponse | null>(null);
   const [displayResults, setDisplayResults] = useState<boolean>(false);
   // chartData and cacheHits are the data stored from backend for the charts
-  const [chartData, setChartData] = useState<any>([]);
+  const [chartData, setChartData] = useState<DataTypes[]>([]);
   const [hitsWithTotal, setHitsWithTotal] = useState<number[]>([0, 0]);
-  const [newPage, setNewPage] = useState<boolean>(true);
-  const [keys, setKeys] = useState<string[]>([]);
+  const keys: string[] = Object.keys(currentFields);
 
   // set current page to Demo for Nav Bar visibility
 
-  if (newPage) {
-    setNewPage(false);
+  useEffect(() => {
     clearCache();
-    setTimeout(() => {
-      changePage("Demo");
-    }, 50);
-    const fieldKeys: string[] = Object.keys(currentFields);
-    setKeys(fieldKeys);
-  }
+    changePage("Demo");
+  });
+  
+  useEffect(() => {
+    // when any checkbox is clicked or dropdown selection edits, will set fetch to false to empty "QUERY RESULTS" part of the dashboard, and will update the query string in order to update the "GraphQL Query" part of dashboard
+    setDisplayResults(false);
+    updateQueryString();
+  }, [idBox, checkboxes, nestedCheckboxes, selectedId, currentDropdown]);
 
-  async function queryResult() {
+  async function getQueryResult() {
     // function is called when "run query" button clicked. This will send of the query string, and alert the user (for now) if they haven't included the id and another checkbox
 
     if (!checkboxes[0] && !checkboxes[1] && !checkboxes[2] && !checkboxes[3]) {
@@ -103,25 +112,20 @@ export default function Demo({ changePage }: dataFormProps) {
       return;
     }
     // must send in object with query property due to how backend uses the request
-    const result = await getData({ query: queryString });
+    const result: QueryResponse = await getData({ query: queryString });
     // get data from backend, update
     setQueryData(result);
     addData(result);
     setDisplayResults(true);
   }
 
-  function addData(result: any) {
+  function addData(result: QueryResponse) {
+    console.log("in add data", result);
     // this function adds data to chartData after each query is ran
     const len: number = chartData.length + 1;
-    type Data = {
-      id: number;
-      cacheHit: boolean;
-      response_time: number;
-      hitPercentage: number;
-      missPercentage: number;
-    };
+    console.log('result', result)
 
-    const newData: Data = {
+    const newData: DataTypes = {
       id: len,
       cacheHit: result.cacheHit,
       response_time: result.time,
@@ -135,11 +139,7 @@ export default function Demo({ changePage }: dataFormProps) {
     setChartData([...chartData, newData]);
   }
 
-  useEffect(() => {
-    // when any checkbox is clicked or dropdown selection edits, will set fetch to false to empty "QUERY RESULTS" part of the dashboard, and will update the query string in order to update the "GraphQL Query" part of dashboard
-    setDisplayResults(false);
-    updateQueryString();
-  }, [idBox, checkboxes, nestedCheckboxes, selectedId, currentDropdown]);
+
 
   // current checkboxes to be used for making the query string and query boxes
 
@@ -176,14 +176,12 @@ export default function Demo({ changePage }: dataFormProps) {
     setDisplayResults(false);
   }
 
-  function changeDropdown(event: any) {
+  const changeDropdown:React.ChangeEventHandler<HTMLInputElement> = (event) =>{
     // invokes when user changes dropdown value
     if (event.target.value === "people") {
       setField(defaultFields);
-      setKeys(Object.keys(defaultFields));
     } else if (event.target.value === "planets") {
       setField(defaultPlanet);
-      setKeys(Object.keys(defaultPlanet));
     }
     setDropdown(event.target.value);
     setSelectedId("1");
@@ -192,13 +190,13 @@ export default function Demo({ changePage }: dataFormProps) {
     updateNestedCheckboxes([false, false]);
   }
 
-  function updateCheckboxesFunc(index: any) {
+  function updateCheckboxesFunc(index: number) {
     const currCheckboxes: boolean[] = [...checkboxes];
     currCheckboxes[index] = !checkboxes[index];
     updateCheckboxes(currCheckboxes);
   }
 
-  function updateNestedCheckboxesFunc(index: any) {
+  function updateNestedCheckboxesFunc(index: number) {
     const currNestedCheckboxes: boolean[] = [...nestedCheckboxes];
     currNestedCheckboxes[index] = !nestedCheckboxes[index];
     updateNestedCheckboxes(currNestedCheckboxes);
@@ -214,7 +212,7 @@ export default function Demo({ changePage }: dataFormProps) {
     setDisplayResults(false);
   }
 
-  function changeId(event: any) {
+  const changeId:React.ChangeEventHandler<HTMLInputElement> = (event) => {
     // invokes when user changes id value
     updateCheckboxes([false, false, false, false]);
     updateNestedCheckboxes([false, false]);
@@ -273,11 +271,7 @@ export default function Demo({ changePage }: dataFormProps) {
           </select>
           <div id="checkboxes">
             <label id="idBox">
-              <input
-                type="checkbox"
-                checked={idBox}
-                onChange={() => changeIdBox()}
-              />
+              <input type="checkbox" checked={idBox} onChange={changeIdBox} />
               _id
             </label>
             <div>
@@ -334,12 +328,12 @@ export default function Demo({ changePage }: dataFormProps) {
                 <input
                   type="checkbox"
                   checked={checkboxes[3]}
-                  onChange={() => updateBoxFour()}
+                  onChange={updateBoxFour}
                 />
                 {keys[3]}
               </label>
             )}
-            {(idBox && checkboxes[3] && currentFields === defaultFields) && (
+            {idBox && checkboxes[3] && currentFields === defaultFields && (
               <label id="nested-checkbox">
                 <input
                   type="checkbox"
@@ -349,7 +343,7 @@ export default function Demo({ changePage }: dataFormProps) {
                 name
               </label>
             )}
-            {(idBox && checkboxes[3] && currentFields === defaultFields) && (
+            {idBox && checkboxes[3] && currentFields === defaultFields && (
               <label id="nested-checkbox">
                 <input
                   type="checkbox"
@@ -361,8 +355,8 @@ export default function Demo({ changePage }: dataFormProps) {
             )}
           </div>
           <div className="buttons">
-            <button onClick={() => queryResult()}>Run Query</button>
-            <button onClick={() => resetAll()}>Clear Cache</button>
+            <button onClick={getQueryResult}>Run Query</button>
+            <button onClick={resetAll}>Clear Cache</button>
           </div>
         </div>
         <div id="graphql-query-container">
